@@ -22,6 +22,20 @@ from src.utils import get_logger
 
 logger = get_logger(__name__)
 
+# LabHC/bias_in_bios stores `profession` and `gender` as plain int64 columns
+# (no HF ClassLabel names attached), so we hardcode the mapping from the
+# dataset card (https://huggingface.co/datasets/LabHC/bias_in_bios), which
+# reproduces the 28-profession label set from De-Arteaga et al. 2019.
+PROFESSION_NAMES = [
+    "accountant", "architect", "attorney", "chiropractor", "comedian",
+    "composer", "dentist", "dietitian", "dj", "filmmaker",
+    "interior_designer", "journalist", "model", "nurse", "painter",
+    "paralegal", "pastor", "personal_trainer", "photographer", "physician",
+    "poet", "professor", "psychologist", "rapper", "software_engineer",
+    "surgeon", "teacher", "yoga_teacher",
+]
+GENDER_NAMES = ["male", "female"]
+
 
 def download_raw_data(config_path: str | None = None) -> None:
     from datasets import load_dataset
@@ -34,11 +48,18 @@ def download_raw_data(config_path: str | None = None) -> None:
     dataset_dict = load_dataset(config.data.dataset_repo)
     logger.info("Splits found: %s", list(dataset_dict.keys()))
 
+    fallback_names = {
+        config.data.target_column: PROFESSION_NAMES,
+        config.data.sensitive_column: GENDER_NAMES,
+    }
     label_names: dict[str, list[str]] = {}
     for column in (config.data.target_column, config.data.sensitive_column):
         feature = dataset_dict[list(dataset_dict.keys())[0]].features.get(column)
         if feature is not None and hasattr(feature, "names"):
             label_names[column] = list(feature.names)
+        elif column in fallback_names:
+            label_names[column] = fallback_names[column]
+            logger.info("Column '%s' has no embedded ClassLabel names; using hardcoded mapping.", column)
 
     for split_name, split_dataset in dataset_dict.items():
         out_path = raw_dir / f"{split_name}.parquet"
