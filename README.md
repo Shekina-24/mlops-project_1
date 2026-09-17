@@ -86,7 +86,7 @@ Full per-profession breakdown: `data/processed/fairness_report.json` after runni
 ## Links
 
 - **Model on the Hugging Face Hub**: [S12-24/bias-in-bios-profession-classifier](https://huggingface.co/S12-24/bias-in-bios-profession-classifier) — pipeline (skops), model card, `fairness_report.json`, `metrics.json`.
-- **Live demo**: deployed on [Streamlit Community Cloud](https://streamlit.io/cloud) from this repo's `app/` folder — see [Deploying the app](#deploying-the-app) below for the one-click setup (link added here once deployed).
+- **Live demo**: [shekina-24-mlops-project-1-appapp-rnyaa0.streamlit.app](https://shekina-24-mlops-project-1-appapp-rnyaa0.streamlit.app) — deployed on [Streamlit Community Cloud](https://streamlit.io/cloud) from this repo's `app/` folder, auto-redeploys on every push to `main`.
 
 ## Reproducing locally
 
@@ -123,6 +123,11 @@ The `app/` folder is self-contained (its own `app.py` + `requirements.txt`) and 
 1. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
 2. "New app" → repository `Shekina-24/mlops-project_1`, branch `main`, main file path `app/app.py`.
 3. Deploy. Streamlit Cloud auto-redeploys on every push to `main`.
+
+   Troubleshooting: if the build hangs for a long time, Streamlit Cloud may have provisioned a very
+   recent Python version without prebuilt `scikit-learn`/`scipy` wheels yet, forcing a slow source
+   build. This repo pins Python via `.python-version` at the repo root as a mitigation; if it still
+   hangs, wait it out (it does eventually succeed) or reboot the app from "Manage app".
 
 **Hugging Face Spaces (alternative)**: Streamlit Spaces require a Space with compute (Gradio/Docker/Streamlit SDK), which needs a paid HF PRO plan as of this writing — free HF accounts are limited to Static Spaces. If you have a PRO plan, create a Space with SDK `streamlit`, and push the contents of `app/` to it (the app is already structured for this — `app/README.md` includes the Space metadata header).
 
