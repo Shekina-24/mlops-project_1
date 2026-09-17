@@ -1,0 +1,92 @@
+# =============================================================================
+# Central configuration for the Bias-in-Bios profession classifier project.
+# Every script under src/ reads its parameters from here via src/config.py —
+# nothing below should be hardcoded elsewhere in the codebase.
+# =============================================================================
+
+seed: 42
+
+data:
+  dataset_repo: "LabHC/bias_in_bios"      # HF dataset id
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  text_column: "hard_text"
+  target_column: "profession"
+  sensitive_column: "gender"
+  num_labels: 28
+
+# Stratified sub-sampling so the whole pipeline trains in a few minutes on CPU.
+# Stratification is done jointly on (profession, gender) to preserve the
+# per-profession gender balance of the original dataset.
+sampling:
+  enabled: true
+  total_samples: 40000          # total rows kept across train+dev+test, set null to disable
+  stratify_by: ["profession", "gender"]
+  min_samples_per_group: 2      # groups smaller than this are kept whole (never further downsampled)
+
+# The HF dataset already ships with train/dev/test splits. We reuse them
+# (each subsampled proportionally) rather than re-splitting, so numbers stay
+# comparable with the Bias in Bios paper. Set use_original_splits: false to
+# instead pool everything and re-split according to the ratios below.
+split:
+  use_original_splits: true
+  train_ratio: 0.65
+  val_ratio: 0.10
+  test_ratio: 0.25
+
+preprocessing:
+  lowercase: false
+  strip_whitespace: true
+  collapse_whitespace: true
+  min_text_length: 20           # rows with a shorter hard_text are dropped
+
+model:
+  type: "logistic_regression"   # "logistic_regression" or "linear_svc"
+  tfidf:
+    max_features: 30000
+    ngram_range: [1, 2]
+    min_df: 2
+    max_df: 0.9
+    sublinear_tf: true
+  logistic_regression:
+    C: 1.0
+    max_iter: 2000
+    class_weight: null
+    solver: "lbfgs"
+    multi_class: "multinomial"
+  linear_svc:
+    C: 1.0
+    max_iter: 5000
+    class_weight: null
+
+# Small randomized/grid search kept intentionally cheap for CPU-only training.
+hyperparameter_search:
+  enabled: true
+  method: "randomized"          # "randomized" or "grid"
+  n_iter: 8
+  cv_folds: 3
+  scoring: "f1_macro"
+  n_jobs: -1
+  param_distributions:
+    logistic_regression:
+      clf__C: [0.01, 0.1, 0.5, 1.0, 3.0, 10.0]
+    linear_svc:
+      clf__C: [0.01, 0.1, 0.5, 1.0, 3.0, 10.0]
+
+fairness:
+  sensitive_column: "gender"
+  gender_labels:
+    0: "male"
+    1: "female"
+  top_k_imbalanced_professions: 8   # professions with the largest male/female ratio gap to highlight
+
+huggingface:
+  dataset_repo: "LabHC/bias_in_bios"
+  model_repo: "S12-24/bias-in-bios-profession-classifier"
+  space_repo: "S12-24/bias-in-bios-demo"
+  private: false
+
+artifacts:
+  local_model_dir: "models/bias_in_bios_pipeline"
+  fairness_report_path: "data/processed/fairness_report.json"
+  metrics_path: "data/processed/metrics.json"
