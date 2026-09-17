@@ -92,19 +92,6 @@ def run_hyperparameter_search(config: Config, X_train, y_train):
     return search.best_estimator_, search.best_params_
 
 
-def build_model_card(config: Config, best_params: dict, dev_metrics: dict, label_names: dict):
-    from skops import card
-
-    model = None  # set by caller via card.Card(model, ...) after fit; placeholder here
-    _ = model
-    metadata_kwargs = dict(
-        license="mit",
-        library_name="skops",
-        tags=["sklearn", "text-classification", "fairness", "bias-in-bios"],
-    )
-    return metadata_kwargs, {"best_params": best_params, "dev_metrics": dev_metrics, "label_names": label_names}
-
-
 def run_training(config_path: str | None = None, push: bool = True, hf_token: str | None = None) -> None:
     config = load_config(config_path)
     set_seed(config.seed)
@@ -144,7 +131,7 @@ def run_training(config_path: str | None = None, push: bool = True, hf_token: st
     if local_repo_dir.exists():
         shutil.rmtree(local_repo_dir)
 
-    from skops import card, hub_utils
+    from skops import hub_utils
 
     example_texts = X_train.head(3).tolist()
     hub_utils.init(
@@ -173,44 +160,10 @@ def run_training(config_path: str | None = None, push: bool = True, hf_token: st
             indent=2,
         )
 
-    # --- Draft model card (evaluate.py adds real test metrics + fairness later) --
-    model_card = card.Card(
-        best_pipeline,
-        metadata=None,
-        trusted=True,
-    )
-    model_card.metadata.license = "mit"
-    model_card.metadata.library_name = "skops"
-    model_card.metadata.tags = ["sklearn", "text-classification", "fairness", "bias-in-bios"]
+    # --- Draft model card (evaluate.py rebuilds the final version with fairness results) --
+    from src.utils import build_base_model_card
 
-    model_card.add(
-        **{
-            "Model description": (
-                "Multinomial classifier predicting a person's **profession** (28 classes) "
-                "from the free-text `hard_text` biography in the "
-                "[LabHC/bias_in_bios](https://huggingface.co/datasets/LabHC/bias_in_bios) dataset "
-                "(derived from De-Arteaga et al., *Bias in Bios*, FAccT 2019, arXiv:1901.09451).\n\n"
-                "**This is an educational / research demo project studying gender bias in automated "
-                "resume screening. It is NOT intended, tested, or suitable for real hiring or HR "
-                "decisions.**"
-            ),
-            "Model description/Training Procedure": (
-                f"TF-IDF vectorizer + `{config.model.type}` (scikit-learn), tuned with "
-                f"{config.hyperparameter_search.method} search over `clf__C` "
-                f"(cv={config.hyperparameter_search.cv_folds}, scoring={config.hyperparameter_search.scoring}).\n\n"
-                f"Best hyperparameters: `{best_params}`."
-            ),
-            "Model description/Intended uses & limitations": (
-                "Intended use: demonstrating and studying gender bias in text-based occupation "
-                "classifiers. Out of scope: any real candidate screening, resume filtering, or "
-                "employment decision. See the 'Bias, Risks and Limitations' section of the project "
-                "README for the full fairness audit."
-            ),
-        }
-    )
-    if dev_metrics:
-        model_card.add_metrics(**{k: v for k, v in dev_metrics.items() if k != "n_samples"})
-
+    model_card = build_base_model_card(config, best_pipeline, best_params, dev_metrics)
     model_card.save(local_repo_dir / "README.md")
     logger.info("Wrote draft model card -> %s", local_repo_dir / "README.md")
 

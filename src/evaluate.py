@@ -50,21 +50,19 @@ def _load_label_names(config: Config) -> dict:
 
 
 def _load_pipeline_local(config: Config):
-    import skops.io as sio
+    from src.utils import load_skops_pipeline
 
     model_path = config.root / config.artifacts.local_model_dir / "model.skops"
     if not model_path.exists():
         raise FileNotFoundError(f"{model_path} not found. Run `python src/train.py` first.")
-    return sio.load(model_path, trusted=True)
+    return load_skops_pipeline(model_path)
 
 
 def _load_pipeline_hub(config: Config, token: str | None = None):
-    import skops.io as sio
-
-    from src.utils import download_file_from_hub
+    from src.utils import download_file_from_hub, load_skops_pipeline
 
     local_path = download_file_from_hub(config.huggingface.model_repo, "model.skops", token=token)
-    return sio.load(local_path, trusted=True)
+    return load_skops_pipeline(local_path)
 
 
 def compute_gender_distribution(df: pd.DataFrame, config: Config, profession_names: list[str]) -> pd.DataFrame:
@@ -232,13 +230,15 @@ def run_evaluation(
     )
 
     if push:
-        _push_evaluation_artifacts(config, metrics_path, fairness_path, overall, fairness_report, gender_mf, hf_token)
+        _push_evaluation_artifacts(config, pipeline, metrics_path, fairness_path, overall, fairness_report, gender_mf, hf_token)
 
     return fairness_report
 
 
-def _push_evaluation_artifacts(config, metrics_path, fairness_path, overall, fairness_report, gender_mf, hf_token):
-    from skops import card, hub_utils
+def _push_evaluation_artifacts(config, pipeline, metrics_path, fairness_path, overall, fairness_report, gender_mf, hf_token):
+    from skops import hub_utils
+
+    from src.utils import build_base_model_card
 
     local_repo_dir = config.root / config.artifacts.local_model_dir
     if not local_repo_dir.exists():
@@ -247,8 +247,19 @@ def _push_evaluation_artifacts(config, metrics_path, fairness_path, overall, fai
 
     hub_utils.add_files(metrics_path, fairness_path, dst=local_repo_dir, exist_ok=True)
 
+    summary_path = local_repo_dir / "training_summary.json"
+    training_summary = {}
+    if summary_path.exists():
+        with open(summary_path, "r", encoding="utf-8") as f:
+            training_summary = json.load(f)
+
     readme_path = local_repo_dir / "README.md"
-    model_card = card.parse_modelcard(readme_path) if readme_path.exists() else card.Card(None, metadata=None)
+    model_card = build_base_model_card(
+        config,
+        pipeline,
+        training_summary.get("best_params", {}),
+        training_summary.get("dev_metrics", {}),
+    )
 
     model_card.add_metrics(
         section="Model description/Evaluation Results",

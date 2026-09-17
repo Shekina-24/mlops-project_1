@@ -113,6 +113,67 @@ def push_folder_to_hub(
     return f"https://huggingface.co/{repo_id}"
 
 
+def build_base_model_card(config, pipeline, best_params: dict, dev_metrics: dict):
+    """Build the skops Card shared by train.py (first push) and evaluate.py
+    (final push): base metadata + description sections. Rebuilt from scratch
+    each time (rather than parsing the previous README back) since
+    `skops.card.parse_modelcard` requires an external pandoc install.
+    """
+    from skops import card
+
+    model_card = card.Card(pipeline, metadata=None, trusted=True)
+    model_card.metadata.license = "mit"
+    model_card.metadata.library_name = "skops"
+    model_card.metadata.tags = ["sklearn", "text-classification", "fairness", "bias-in-bios"]
+
+    model_card.add(
+        **{
+            "Model description": (
+                "Multinomial classifier predicting a person's **profession** (28 classes) "
+                "from the free-text `hard_text` biography in the "
+                "[LabHC/bias_in_bios](https://huggingface.co/datasets/LabHC/bias_in_bios) dataset "
+                "(derived from De-Arteaga et al., *Bias in Bios*, FAccT 2019, arXiv:1901.09451).\n\n"
+                "**This is an educational / research demo project studying gender bias in automated "
+                "resume screening. It is NOT intended, tested, or suitable for real hiring or HR "
+                "decisions.**"
+            ),
+            "Model description/Training Procedure": (
+                f"TF-IDF vectorizer + `{config.model.type}` (scikit-learn), tuned with "
+                f"{config.hyperparameter_search.method} search over `clf__C` "
+                f"(cv={config.hyperparameter_search.cv_folds}, scoring={config.hyperparameter_search.scoring}).\n\n"
+                f"Best hyperparameters: `{best_params}`."
+            ),
+            "Model description/Intended uses & limitations": (
+                "Intended use: demonstrating and studying gender bias in text-based occupation "
+                "classifiers. Out of scope: any real candidate screening, resume filtering, or "
+                "employment decision. See the 'Bias, Risks and Limitations' section below for the "
+                "full fairness audit."
+            ),
+        }
+    )
+    if dev_metrics:
+        model_card.add_metrics(
+            section="Model description/Evaluation Results",
+            description="Metrics computed on the `dev` split right after training (sanity check).",
+            **{k: v for k, v in dev_metrics.items() if k != "n_samples"},
+        )
+    return model_card
+
+
+def load_skops_pipeline(path: str | Path):
+    """Load a scikit-learn pipeline saved with skops.io.dump.
+
+    We trust the artifact because it is produced by our own src/train.py, so
+    we auto-approve whatever custom types skops flags (TfidfVectorizer,
+    LogisticRegression/LinearSVC, CalibratedClassifierCV, numpy dtypes, etc.)
+    rather than hardcoding a type list that would break on every model change.
+    """
+    import skops.io as sio
+
+    untrusted = sio.get_untrusted_types(file=path)
+    return sio.load(path, trusted=untrusted)
+
+
 def download_file_from_hub(repo_id: str, filename: str, token: str | None = None) -> str:
     """Download a single file from a model repo on the HF Hub, returning the local path."""
     from huggingface_hub import hf_hub_download
