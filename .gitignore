@@ -1,0 +1,38 @@
+# Data (raw & processed are gitignored per project spec)
+data/raw/
+data/processed/
+*.csv
+*.parquet
+
+# Models & artifacts
+*.skops
+*.pkl
+*.joblib
+models/
+mlruns/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.*
+*.token
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
